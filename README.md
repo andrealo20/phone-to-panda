@@ -226,8 +226,9 @@ bash experiments/train.sh phone
 bash experiments/eval.sh ~/runs/teleop13
 bash experiments/eval.sh ~/runs/phone13
 python scripts/ablate.py data/raw/s01
-python scripts/render_replay.py data/raw/s01 demo_020
+python scripts/render_replay.py data/raw/s01 demo_020 --state 1
 python scripts/figures.py data/raw/s01 demo_020 --sim outputs/figures/demo_020_sim.png
+python scripts/make_gifs.py
 ```
 
 `python scripts/sim_smoke.py 20` checks the simulator side alone with a
@@ -245,7 +246,7 @@ src/p2p/      board.py camera.py hand.py video.py   perception
               sim_map.py                              table frame -> LIBERO scene
               sim.py                                  servo, playback, LeRobot frames
 scripts/      calibrate, track, retarget, generate, ablate, render_replay,
-              figures, sim_smoke, make_board, libero_episodes
+              figures, make_gifs, sim_smoke, make_board, libero_episodes
 experiments/  train.sh, eval.sh
 docs/         recording.md, board/, figures/, media/
 ```
