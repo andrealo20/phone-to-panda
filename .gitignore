@@ -1,0 +1,9 @@
+__pycache__/
+*.egg-info/
+.venv/
+outputs/
+runs/
+data/raw/
+data/cache/
+*.mp4
+!docs/media/*.mp4
