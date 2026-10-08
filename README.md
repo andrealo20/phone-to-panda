@@ -50,10 +50,10 @@ wrist corrections from the servo that the teleoperators never make (rotation
 command 0.15 against 0.04 on one axis). Those are the next things I would
 change.
 
-| | |
-|---|---|
-| ![A successful rollout of the policy trained on my clips](docs/media/policy_phone_success.gif) | ![A failed rollout of the same policy](docs/media/policy_phone_failure.gif) |
-| trained on my clips, success | same policy, failure |
+| | | |
+|---|---|---|
+| <img src="docs/media/policy_phone_success.gif" width="240" alt="A successful rollout of the policy trained on my clips"> | <img src="docs/media/policy_phone_failure.gif" width="240" alt="A failed rollout of the same policy"> | <img src="docs/media/policy_teleop_success.gif" width="240" alt="A rollout of the policy trained on teleoperated demos"> |
+| trained on my clips, success | same policy, failure | trained on teleoperated demos |
 
 ## How it works
 
@@ -118,7 +118,7 @@ the robot's fingers reach the contact point (at most 1 s of waiting), and it
 then holds still for half a second, because the Panda's fingers close much
 slower than mine.
 
-![One of my clips replayed in LIBERO](docs/media/replay_demo_020.gif)
+<img src="docs/media/replay_demo_020.gif" width="360" alt="One of my clips replayed in LIBERO">
 
 ### Replayed demos as training data
 
