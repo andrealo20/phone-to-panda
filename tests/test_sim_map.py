@@ -1,6 +1,6 @@
 import numpy as np
 
-from p2p.sim_map import Demo, Scene, heading, map_demo, rot_z, trim
+from p2p.sim_map import Demo, Scene, heading, map_demo, retime_carry, rot_z, trim
 
 BELOW = 0.01
 SIM = Scene(np.array([0.0, 0.2, 0.95]), 0.047, np.array([0.15, 0.1, 0.92]), 0.9)
@@ -95,3 +95,16 @@ def test_trim_keeps_only_the_part_near_the_contacts():
     assert start_dist < 0.10 and len(t.pinch) < len(d.pinch)
     # the retreat here only goes straight up, never 10 cm sideways: kept whole
     assert len(t.pinch) - t.release == len(d.pinch) - d.release
+
+
+def test_retimed_carry_keeps_its_ends_and_runs_faster():
+    d = demo()
+    n = d.release - d.grasp
+    r = retime_carry(d, n // 2)
+    assert r.release - r.grasp == n // 2
+    assert np.allclose(r.pinch[r.grasp], d.pinch[d.grasp])
+    assert np.allclose(r.pinch[r.release], d.pinch[d.release])
+    assert np.allclose(r.pinch[: r.grasp], d.pinch[: d.grasp])  # approach untouched
+    assert np.allclose(r.pinch[r.release:], d.pinch[d.release:])  # retreat untouched
+    assert r.grip[r.grasp:r.release].all() and len(r.pinch) == len(d.pinch) - (n - n // 2)
+    assert retime_carry(d, n + 5) is d  # already short enough

@@ -7,6 +7,11 @@ is itself a result: it measures how often an open-loop replay of my hand works.
 
 Usage:
   python scripts/generate.py data/raw/<session> --per-demo 8 --out outputs/datasets/phone
+  python scripts/generate.py data/raw/<session> --keep 16 --max-tries 40 --carry-steps 40 ...
+
+With --keep, every clip is replayed until it has that many kept episodes (or
+--max-tries attempts), so that no clip dominates the dataset; with
+--per-demo, every clip gets the same number of attempts.
 
 The feature schema is copied from the lerobot/libero dataset so that the
 episodes are interchangeable with the official teleoperated ones.
@@ -19,7 +24,7 @@ from pathlib import Path
 import numpy as np
 
 from p2p import sim
-from p2p.sim_map import Demo, map_demo, trim
+from p2p.sim_map import Demo, map_demo, retime_carry, trim
 
 ROOT = Path(__file__).resolve().parents[1]
 HZ = 20
@@ -60,6 +65,9 @@ def main() -> None:
     ap.add_argument("--per-demo", type=int, default=8)
     ap.add_argument("--out", type=Path, default=ROOT / "outputs" / "datasets" / "phone")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--keep", type=int, help="replay each clip until this many episodes are kept")
+    ap.add_argument("--max-tries", type=int, default=48)
+    ap.add_argument("--carry-steps", type=int, help="squeeze the carry into at most this many steps")
     args = ap.parse_args()
 
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -73,12 +81,17 @@ def main() -> None:
     log = []
     for f in files:
         demo = load_demo(f)
-        for k in range(args.per_demo):
+        if args.carry_steps:
+            demo = retime_carry(demo, args.carry_steps)
+        kept, k = 0, 0
+        while (kept < args.keep and k < args.max_tries) if args.keep else k < args.per_demo:
             env.seed(args.seed * 100_000 + len(log))
             env.reset()
             sim.settle(env)
             frames, ok = rollout(env, demo)
-            log.append({"demo": f.stem.removesuffix("_traj"), "try": k, "success": bool(ok),
+            kept += ok
+            k += 1
+            log.append({"demo": f.stem.removesuffix("_traj"), "try": k - 1, "success": bool(ok),
                         "steps": len(frames)})
             if ok:
                 for fr in frames:
@@ -87,6 +100,8 @@ def main() -> None:
             print(f"{f.stem} try {k}: {'ok' if ok else 'fail'} ({len(frames)} steps)", flush=True)
     ds.finalize()
     (args.out / "generation_log.json").write_text(json.dumps(log, indent=1))
+    (args.out / "generation_args.json").write_text(json.dumps(
+        {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()}, indent=1))
     rate = np.mean([r["success"] for r in log])
     print(f"kept {sum(r['success'] for r in log)}/{len(log)} episodes ({rate:.0%})")
 

@@ -99,28 +99,35 @@ def finger_heading(R: np.ndarray) -> float:
 class Servo:
     """Proportional tracking of (position, finger heading, gripper) targets.
 
-    Orientation is kept pointing down; only the heading about the vertical is
-    tracked, and modulo pi, because the gripper is symmetric under a half turn.
+    ``rot="full"`` holds the start orientation (pointing down) and tracks the
+    heading about the vertical, modulo pi because the gripper is symmetric
+    under a half turn. ``rot="yaw"`` commands only the heading and lets pitch
+    and roll drift, as the teleoperators of the LIBERO demos do; with the bowl
+    held the gripper then tilts and most replays fail (scripts/screen_servo.py).
     """
 
-    def __init__(self, R_down: np.ndarray):
+    def __init__(self, R_down: np.ndarray, rot: str = "full"):
         self.R_down = R_down
         self.h0 = finger_heading(R_down)
+        self.rot = rot
 
     def action(self, env, pos, heading, closed) -> np.ndarray:
         p, R = eef(env)
         dp = np.clip((pos - p) / POS_SCALE, -1, 1)
         cur = finger_heading(R)
         dh = (heading - cur + np.pi / 2) % np.pi - np.pi / 2  # nearest equivalent heading
-        R_target = rot_z(cur + dh - self.h0) @ self.R_down
-        dr = Rotation.from_matrix(R_target @ R.T).as_rotvec()
+        if self.rot == "yaw":
+            dr = np.array([0.0, 0.0, dh])
+        else:
+            R_target = rot_z(cur + dh - self.h0) @ self.R_down
+            dr = Rotation.from_matrix(R_target @ R.T).as_rotvec()
         dr = np.clip(dr / ROT_SCALE, -1, 1)
         return np.r_[dp, dr, 1.0 if closed else -1.0]
 
 
 def play(env, P, heading, grip, hz: float, on_step=None, arrive_tol: float = 0.01,
          max_wait_s: float = 1.0, finger_s: float = 0.5, hold_s: float = 1.0,
-         stop_after_success: int | None = None) -> tuple[bool, int]:
+         stop_after_success: int | None = None, servo: dict | None = None) -> tuple[bool, int]:
     """Execute pinch targets from the current robot pose.
 
     A straight approach from the start pose comes first. The gripper command
@@ -131,11 +138,11 @@ def play(env, P, heading, grip, hz: float, on_step=None, arrive_tol: float = 0.0
     motion by a few centimetres, and the Panda's fingers take about half a
     second to close; on the human's clock the gripper closed on air.
 
-    ``on_step(obs_before, action)`` sees every step, for recording. Returns
-    (success, steps).
+    ``on_step(obs_before, action)`` sees every step, for recording. ``servo``
+    holds keyword options for :class:`Servo`. Returns (success, steps).
     """
     p0, R0 = eef(env)
-    servo = Servo(R0)
+    servo = Servo(R0, **(servo or {}))
     pre = approach_from(p0, P[0], hz)
     targets = [(p, heading[0], False) for p in pre] + list(zip(P, heading, grip > 0.5))
     targets += [(P[-1], heading[-1], False)] * int(hold_s * hz)

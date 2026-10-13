@@ -29,15 +29,19 @@ def episodes_of_task(task: str = TASK_LANGUAGE) -> list[int]:
     return sorted(int(e) for e in eps)
 
 
+def pick(n: int | None, seed: int = 0) -> list[int]:
+    idx = episodes_of_task()
+    if n is None:
+        return idx
+    return sorted(np.random.default_rng(seed).choice(idx, n, replace=False).tolist())
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("n", type=int, nargs="?")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
-    idx = episodes_of_task()
-    if args.n is not None:
-        idx = sorted(np.random.default_rng(args.seed).choice(idx, args.n, replace=False).tolist())
-    print(f"[{','.join(map(str, idx))}]")
+    print(f"[{','.join(map(str, pick(args.n, args.seed)))}]")
 
 
 if __name__ == "__main__":

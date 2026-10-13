@@ -77,8 +77,8 @@ def trim(demo: Demo, reach: float = 0.10) -> Demo:
 
     Before that the path says where I happened to be standing, not how to do
     the task, and the robot starts from its own home pose instead. Replaying
-    my whole path taught the policy my detours: it circled the bowl and never
-    grasped (3 of 50).
+    my whole path taught the policy my detours: it circled the bowl and succeeded
+    in 3 of 50 episodes.
     """
     P, g, r = demo.pinch, demo.grasp, demo.release
     near_g = np.linalg.norm(P[: g + 1, :2] - P[g, :2], axis=1) < reach
@@ -87,6 +87,25 @@ def trim(demo: Demo, reach: float = 0.10) -> Demo:
     end = r + int(np.argmax(far_r)) if far_r.any() else len(P) - 1
     keep = slice(start, end + 1)
     return Demo(P[keep], demo.grip[keep], g - start, r - start)
+
+
+def retime_carry(demo: Demo, steps: int) -> Demo:
+    """Squeeze the carry (grasp to release) into at most ``steps`` targets.
+
+    The carry keeps my duration otherwise, and I carried slowly: 84 recorded
+    steps against the teleoperators' 48 for the same 35 cm. The path and its
+    speed profile keep their shape; only the clock runs faster.
+    """
+    g, r = demo.grasp, demo.release
+    n = r - g
+    if n <= steps:
+        return demo
+    u = np.linspace(0, n, steps + 1)
+    idx = np.arange(n + 1)
+    seg = np.stack([np.interp(u, idx, demo.pinch[g:r + 1, k]) for k in range(3)], axis=1)
+    grip = np.interp(u, idx, demo.grip[g:r + 1]).round()
+    return Demo(np.r_[demo.pinch[:g], seg, demo.pinch[r + 1:]],
+                np.r_[demo.grip[:g], grip, demo.grip[r + 1:]], g, g + steps)
 
 
 def map_demo(demo: Demo, sim: Scene, pinch_below_rim: float, allow_mirror: bool = True,
