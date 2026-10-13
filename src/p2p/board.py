@@ -7,7 +7,7 @@ here so that calibration and tracking always agree on the layout.
 
 Table frame: origin at the board's top-left inner corner as seen on screen, x
 along the board width, y along the board height (pointing "down" the screen),
-z = x cross y, i.e. into the table. ``table_frame_up`` flips z so that it
+z = x cross y, i.e. into the table. ``R_BOARD_TO_TABLE`` flips z so that it
 points up, which is the convention used everywhere after detection.
 """
 

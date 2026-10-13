@@ -7,8 +7,8 @@ are on the rim, which is when it matters (grasp and release), and only shifts
 the path in between.
 
 Grasp and release come from the motion, not from the fingers: the bowl moves
-only while it is held, so the carry is the stretch between the two pauses
-that are farthest apart.
+only while it is held, so grasp and release are the last two places where the
+hand stops, and the carry is the stretch between them.
 
 The height is not measured. The gripper follows a cone around the two contact
 points: it rises with horizontal distance from them, up to a ceiling.
@@ -152,8 +152,9 @@ def contact_planes(n: int, g: int, r: int, z_grasp: float, z_release: float) -> 
     return z
 
 
-# Bowl and plate are never closer than ~20 cm centre to centre in the protocol,
-# so a shorter carry means the contacts were read wrong (hand lost at a pause).
+# The bowl travelled 18 to 49 cm in the usable clips (15 to 35 cm asked in the
+# protocol), so a shorter carry means the contacts were read wrong (hand lost
+# at a pause).
 MIN_CARRY = 0.12
 
 

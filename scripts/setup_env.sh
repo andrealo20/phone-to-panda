@@ -7,7 +7,7 @@ set -euo pipefail
 
 VENV="${1:-$HOME/venvs/phone-to-panda}"
 LEROBOT_DIR="${LEROBOT_DIR:-$HOME/src/lerobot}"
-LEROBOT_REF="${LEROBOT_REF:-main}"
+LEROBOT_REF="${LEROBOT_REF:-8c920c4270460851cedd2737657584586d3dc66f}"  # the commit the results were produced with
 
 python3 -m venv "$VENV"
 # shellcheck disable=SC1091
@@ -23,16 +23,20 @@ echo "lerobot at $(git -C "$LEROBOT_DIR" rev-parse HEAD)"
 
 uv pip install -e "$LEROBOT_DIR[smolvla,libero]"
 uv pip install av "mediapipe==1.0.1" scipy matplotlib pytest
-# lerobot and mediapipe pull different OpenCV builds into the same cv2 folder;
-# keep exactly one version of each.
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+uv pip install -e "$REPO_DIR"
+# lerobot and mediapipe pull three different OpenCV packages into the same cv2
+# folder; keep all three at one version, contrib last since it has every module.
 uv pip uninstall opencv-contrib-python opencv-python opencv-python-headless
 uv pip install opencv-python-headless==4.13.0.92
 uv pip install opencv-python==4.13.0.92
+uv pip install opencv-contrib-python==4.13.0.92
 uv pip install "numpy>=2,<2.3"  # the OpenCV wheels pull a newer numpy than lerobot accepts
 uv pip check
 
-REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-uv pip install -e "$REPO_DIR"
+# LIBERO asks on its first import where to keep its datasets; answer once here
+# with the default, so a background job never waits on that prompt.
+echo n | python -c "import libero.libero" > /dev/null
 
 python - <<'EOF'
 import torch, mujoco, cv2, mediapipe

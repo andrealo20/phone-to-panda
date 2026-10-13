@@ -3,7 +3,11 @@ __pycache__/
 .venv/
 outputs/
 runs/
-data/raw/
-data/cache/
+# the clips are a release asset; what was measured from them is committed
+data/raw/*/*
+!data/raw/*/*.json
+data/cache/*.*
+data/cache/*/*
+!data/cache/*/demo_???.npz
 *.mp4
 !docs/media/*.mp4

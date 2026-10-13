@@ -51,7 +51,7 @@ def main() -> None:
         cv2.drawFrameAxes(frame, intr.K, intr.dist, rvec, T[:3, 3], 0.06, 4)
 
     panels = 3 if args.sim else 2
-    fig, ax = plt.subplots(1, panels, figsize=(5.2 * panels, 3.6),
+    fig, ax = plt.subplots(1, panels, figsize=(5.2 * panels, 4.4),
                            gridspec_kw={"width_ratios": [1.6, 1, 1][:panels]})
     ax[0].imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     ax[0].set_title("phone, at the grasp: board axes and my pinch path", fontsize=9)
@@ -68,7 +68,8 @@ def main() -> None:
     ax[1].set_aspect("equal")
     ax[1].set_xlabel("x on the table (cm)")
     ax[1].set_ylabel("y (cm)")
-    ax[1].legend(fontsize=7, loc="lower left")
+    # below the plot: inside it would cover the grasp and the end of the approach
+    ax[1].legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=2, frameon=False)
     ax[1].set_title("table frame, from the board", fontsize=9)
 
     if args.sim:

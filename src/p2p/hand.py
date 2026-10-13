@@ -17,8 +17,9 @@ import numpy as np
 
 THUMB_TIP, INDEX_TIP = 4, 8
 
+# version 1, the one the clips were tracked with ("latest" can change)
 MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
-             "hand_landmarker/float16/latest/hand_landmarker.task")
+             "hand_landmarker/float16/1/hand_landmarker.task")
 MODEL_PATH = Path(__file__).resolve().parents[2] / "data" / "cache" / "hand_landmarker.task"
 
 
