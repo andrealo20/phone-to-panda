@@ -6,25 +6,78 @@ hand, and used those clips to make a Panda arm do the same task in LIBERO
 table in centimetres, mapped onto the simulated scene, and replayed open loop
 in several LIBERO scenes; the replays that succeed become training data for
 SmolVLA, compared against the same number of LIBERO's own teleoperated
-demonstrations.
+demonstrations. The best policy trained only on my clips solves 23 of the 50
+test states; the same model trained on 13 teleoperated demos solves 46 (both
+predicting again every 10 actions).
 
-![The same demonstration on my table, in table coordinates, and replayed in LIBERO](docs/figures/overview.png)
+| | |
+|---|---|
+| <img src="docs/media/phone_demo_020.gif" width="427" alt="One of my clips, with the board axes and my thumb and index tips"> | <img src="docs/media/replay_demo_020.gif" width="240" alt="The same clip replayed in LIBERO"> |
+| demo_020 on my table, with the board axes and the tracked thumb and index tips | the same clip replayed in LIBERO |
+
+[Approach](#approach) · [Results](#results) · [How it works](#how-it-works) ·
+[Ablation](#ablation) · [What did not work](#what-did-not-work) ·
+[Limitations](#limitations) · [Running it](#running-it)
+
+## Approach
+
+```mermaid
+flowchart LR
+  clip["13 phone clips<br/>my hand, a board on a tablet"] --> track["board pose and hand pixels<br/>in every frame"]
+  track --> path["pinch path on the table, in cm<br/>grasp and release from pauses"]
+  path --> map["mapped onto a LIBERO scene<br/>anchored at the rim and the plate"]
+  map --> replay["open-loop replay in fresh scenes<br/>kept only if LIBERO reports success"]
+  replay --> data["LeRobot dataset<br/>same format as lerobot/libero"]
+  data --> vla["SmolVLA fine-tuned"]
+  tele["13 teleoperated LIBERO demos"] --> vla2["the same SmolVLA model"]
+  vla --> test["50 fixed test states"]
+  vla2 --> test
+  test -. "watch the failures, find the cause in the data, change one thing" .-> map
+```
+
+- The question is whether clips of my own hand, filmed with a phone, can
+  stand in for teleoperated demonstrations when fine-tuning a VLA. It is
+  measured on one LIBERO task, against the same model trained on the same
+  number of LIBERO's own teleoperated demos, on the task's 50 fixed test
+  states.
+- The phone gives pixels and the robot needs actions. I turn each clip into
+  robot actions in simulation and let LIBERO's own success check decide which
+  replays become training data. The policy then learns from ordinary robot
+  data, and everything specific to my clips sits in the conversion.
+- The conversion measures what it can and states what it assumes: scale from
+  a board of known square size on a tablet, depth from the plane of the bowl's
+  rim, grasp and release from where the hand stops. The hand's height is set
+  by a rule. Each measured piece is checked against a known answer in the
+  tests.
+- From there I changed one thing at a time, each time after watching the
+  previous policy fail and finding the cause in the data. In the second round,
+  changes were screened and checkpoints chosen on freshly sampled scenes, and
+  the 50 test states were used once per model.
 
 ## Results
 
-13 demonstrations per side, same model (SmolVLA fine-tuned from
-`lerobot/smolvla_base`), 4000 steps, batch 32, seed 0, evaluated on the 50
-fixed initial states of the task.
+Same model throughout (SmolVLA fine-tuned from `lerobot/smolvla_base`, batch
+32, seed 0), evaluated on the 50 fixed initial states of the task, either
+executing each predicted 50-action chunk whole (LeRobot's default) or
+predicting again every 10 actions.
 
-| Training data | Replays kept | Success (of 50) | 95% interval |
-|---|---|---|---|
-| 13 teleoperated LIBERO demos | | **42** (84%) | 72 to 92% |
-| 13 phone clips, wrist turned towards my grasp side | 66 of 104 | 0 (0%) | 0 to 7% |
-| 13 phone clips, wrist kept at rest | 40 of 104 | 3 (6%) | 2 to 16% |
-| 13 phone clips, wrist at rest, approach cut to the last 10 cm | 64 of 104 | **9** (18%) | 10 to 31% |
+| Training data | Replays kept | Training steps | Success /50, whole chunks | Success /50, every 10 actions |
+|---|---|---|---|---|
+| 13 teleoperated LIBERO demos | | 4k | **42** | **46** |
+| 13 phone clips, wrist turned towards my grasp side | 66 of 104 | 4k | 0 | |
+| 13 phone clips, wrist kept at rest | 40 of 104 | 4k | 3 | |
+| 13 phone clips, wrist at rest, approach cut to the last 10 cm | 64 of 104 | 4k | 9 | 6 |
+| the 13 teleoperated demos and those 64 replays together | | 4k | 8 | |
+| 13 phone clips, 16 replays kept per clip, shorter carry | 181 of 367 | 8k (of 20k) | 11 | **23** |
+| the same with twice as many replays | 372 of 725 | 16k | 13 | 10 |
 
-The rows are in the order I ran them. Each change came from watching the
-previous policy fail and finding the cause in the data:
+95% intervals: 42 of 50 is 71 to 92%, 46 is 81 to 97%, 23 is 33 to 60%, 9 is
+10 to 31%. Between phone rows, a few successes either way mean nothing.
+
+### First round: 0% to 18%
+
+The first three phone rows are in the order I ran them. Each change came from
+watching the previous policy fail and finding the cause in the data:
 
 - **0%:** the policy hovered over the bowl and pushed it. My replays turned
   the gripper to close on whatever side of the bowl my hand had come from, so
@@ -41,23 +94,80 @@ previous policy fail and finding the cause in the data:
   after the release, and starting from the robot's own home pose, the policy
   goes to the bowl and completes the task 9 times.
 
-A phone clip from my kitchen is worth much less than a teleoperated demo, but
-most of the loss is not in reconstructing my hand: replayed open loop, the
-same clips put the bowl on the plate 71% of the time (ablation below). It is
-in learning from those replays. They are still slower than the teleoperated
-episodes (147 steps against 91, from the robot's waits and pauses) and carry
-wrist corrections from the servo that the teleoperators never make (rotation
-command 0.15 against 0.04 on one axis). Those are the next things I would
-change.
+SmolVLA predicts 50 actions at a time and by default executes all of them
+before looking again. Predicting again every 10 actions (`n_action_steps=10`)
+moved the teleoperated policy from 42 to 46 and this phone policy from 9 to
+6, both within the noise. The episode-by-episode outcomes say more: the
+teleoperated policy solves the same 40 initial states in both runs, while of
+the 14 states the phone policy solves in either run, only one is solved in
+both. Its successes do not come from a few easy scenes; they come and go with
+when it replans.
+
+Adding my replays to the teleoperated demos does not help. Trained on both
+(stored as lossless images, so the pixels are exactly those of the separate
+runs), the policy solves 8 of 50, about as many as with my replays alone. By
+frame count the replays are 88% of that dataset (9071 of 10320), so they are
+most of what the policy learns from. In the failed episodes I watched it
+lifts the bowl and then sets it down short of the plate or beside it, once
+knocking over the wine bottle. The 8 states it solves are all among the 42
+the teleoperated policy solves. Giving the two sources equal weight in the
+batches is the run I would try next.
+
+### Second round: 18% to 46%
+
+The policy was far worse than its own training data (replayed open loop, the
+same clips succeed 71% of the time, see the ablation), so I compared my
+replays with the teleoperated episodes in what the policy learns from:
+
+| | teleoperated | my replays |
+|---|---|---|
+| carry, recorded steps (median) | 48 | 84 |
+| rotation command during the carry, largest axis (mean, normalised) | 0.05 | 0.23 |
+| replays kept per clip | | 0 to 8 |
+| training loss at 4000 steps | 0.054, flat | 0.133, still falling |
+
+Two replay changes were screened on 52 freshly sampled scenes before any
+training. Commanding only the heading and letting the wrist tilt, as the
+teleoperators' small rotation commands suggest, shortens the carry to theirs
+(47 steps) but drops the replays from 29 to 10 successes: in the replay I
+rendered, the gripper tilted to 61 degrees under the bowl and the arm folded.
+The tilt correction stays. Squeezing the carry into at most 40 steps keeps 29
+and cuts its still steps from 24 to 17, so it stays too.
+
+What moved the result was more data, balanced across clips, and longer
+training. Each clip was replayed until 16 replays were kept (181 in all;
+demo_002 and demo_019 stopped at 10 after 40 attempts, demo_024 at 1), and
+SmolVLA trained for 20,000 steps. I chose the checkpoint on 50 freshly sampled
+scenes (19, 30, 25, 25 and 24 of 50 at 4k to 20k steps), then evaluated it
+once on the test states: 23 of 50 predicting again every 10 actions, 11
+executing whole chunks. Of the 5 failures among the 10 test episodes with
+video, 3 bring the bowl to the plate, leave it on the rim or beside it and run
+out of the 300 steps trying again; 1 goes to the plate without the bowl; 1
+twists the wrist over the bowl and never holds it.
+
+Twice as many replays did not help: 31 of 50 on fresh scenes, level with the
+181, but 10 and 13 on the test states.
+
+These numbers are noisy. The two chosen checkpoints solve 30 and 31 of 50
+fresh scenes but between 10 and 23 of the test states, and the same checkpoint
+gives 23 or 11 depending only on how often it replans. The object layouts of
+the two scene sets match; the robot's start differs by about 1 cm, but success
+does not track that offset. With one 50-episode evaluation per model, 23 of 50
+is a single draw.
 
 | | | |
 |---|---|---|
 | <img src="docs/media/policy_phone_success.gif" width="240" alt="A successful rollout of the policy trained on my clips"> | <img src="docs/media/policy_phone_failure.gif" width="240" alt="A failed rollout of the same policy"> | <img src="docs/media/policy_teleop_success.gif" width="240" alt="A rollout of the policy trained on teleoperated demos"> |
-| trained on my clips, success | same policy, failure | trained on teleoperated demos |
+| trained on my clips (181 replays), success | same policy, failure | trained on 13 teleoperated demos |
 
 ## How it works
 
+![The same demonstration on my table, in table coordinates, and replayed in LIBERO](docs/figures/overview.png)
+
 ### A tablet as the ruler
+
+Code: [board.py](src/p2p/board.py), [camera.py](src/p2p/camera.py),
+[calibrate.py](scripts/calibrate.py)
 
 A ChArUco board shown full screen on an iPad lying flat on the table defines
 the table frame. Its square size is measured once with a ruler (31 mm), so
@@ -68,6 +178,9 @@ angles. Board reprojection error over the 26 clips is 0.09 to 0.15 px.
 
 ### The hand gives a pixel, the table gives the depth
 
+Code: [hand.py](src/p2p/hand.py), [track.py](scripts/track.py),
+[retarget.py](src/p2p/retarget.py)
+
 MediaPipe finds the hand; I use only the 2D midpoint of thumb and index
 fingertips. Its depth comes from the table: the camera ray through that pixel
 is cut with the horizontal plane at the bowl rim's height (bowl height minus
@@ -76,15 +189,19 @@ rim, which is when it matters.
 
 ### Grasp and release from the motion
 
+Code: [retarget.py](src/p2p/retarget.py)
+
 The thumb-index distance is too noisy to say when the fingers close (the
 fingertips are inside the bowl). The motion is not: the bowl only moves while
 it is held, so the grasp and release are the last two places where the hand
 stops, with the carry in between. Pauses closer than 4 cm are one place, which
 absorbs tracking noise and small finger adjustments on the rim. A carry
-shorter than 12 cm means the pauses were misread (bowl and plate were always
-at least 20 cm apart), and the clip is dropped.
+shorter than 12 cm means the pauses were misread (in the usable clips the
+bowl travelled 18 to 49 cm), and the clip is dropped.
 
 ### What the robot replays
+
+Code: [retarget.py](src/p2p/retarget.py), [sim_map.py](src/p2p/sim_map.py)
 
 - Approach and retreat: my hand's path within 10 cm of the grasp and of the
   release, cut at the height the robot will replay rather than at the rim, so
@@ -98,6 +215,8 @@ at least 20 cm apart), and the clip is dropped.
   nearest contact point, three times as fast as it moves sideways, up to 10 cm.
 
 ### From my table to LIBERO's
+
+Code: [sim_map.py](src/p2p/sim_map.py), [sim.py](src/p2p/sim.py)
 
 Bowl and plate look the same from every side, so the task does not change if
 the demonstration is rotated about the bowl. The replay is rotated so that my
@@ -118,14 +237,16 @@ the robot's fingers reach the contact point (at most 1 s of waiting), and it
 then holds still for half a second, because the Panda's fingers close much
 slower than mine.
 
-<img src="docs/media/replay_demo_020.gif" width="360" alt="One of my clips replayed in LIBERO">
-
 ### Replayed demos as training data
 
-Each usable clip is replayed in 8 freshly sampled LIBERO scenes; LIBERO's own
-success check decides which replays become training episodes, recorded in the
-exact format of the `lerobot/libero` dataset (camera orientation, state vector
-and action convention checked against it). Evaluation uses LIBERO's 50 fixed
+Code: [generate.py](scripts/generate.py), [sim.py](src/p2p/sim.py)
+
+In the first round each usable clip was replayed in 8 freshly sampled LIBERO
+scenes; in the second, until 16 replays were kept (at most 40 attempts), so
+that no clip dominates. LIBERO's own success check decides which replays
+become training episodes, recorded in the exact format of the `lerobot/libero`
+dataset (camera orientation, state vector and action convention checked
+against it). Evaluation uses LIBERO's 50 fixed
 initial states, which the replays never saw.
 
 ## Ablation
@@ -147,6 +268,11 @@ difference of a handful of runs means nothing.
 | rays cut at the rim plane instead of the replay height | 33 (63%) |
 | no mirror image | 37 (71%) |
 | wrist turned towards my grasp side | 48 (92%) |
+
+The replay works because of decisions that are not in my hand's motion.
+Without the half-second pause for the fingers it drops from 37 to 15
+successes; replaying my whole approach instead of the last 10 cm, to 21; a
+45-degree descent instead of a steep one, to 24.
 
 Two rows say something beyond "this helps". The mirror image no longer changes
 anything once the grasp side is snapped. I added it earlier, when on one clip
@@ -179,6 +305,12 @@ every turn of the wrist moves it.
 overshot the plate on several clips (25 cm on one) and dragged the bowl over
 the plate's rim; in the ablation it costs 21 points.
 
+**Evaluating at the training resolution.** LeRobot renders the LIBERO
+cameras at 360x360 by default, while all the training data, mine and the
+teleoperated, are 256x256. Evaluating at 256 gave 10 of 50 for the 18% phone
+policy and 36 of 50 for the teleoperated one: no gain, so every number above
+uses the default.
+
 **Framing.** Of the 26 clips I recorded, 13 are usable. In the first batch I
 filmed from too far and too low; the bowl and my hand left the frame when I
 lifted it, and the hand was lost exactly at the pauses. After moving the phone
@@ -187,8 +319,13 @@ hand in view but pauses too short to stand out from fingertip jitter.
 
 ## Limitations
 
-- One task, one seed per training run, 50 evaluation episodes: the 18% has an
-  interval from 10 to 31%.
+- One task, one seed per training run, 50 evaluation episodes: the 46% has an
+  interval from 33 to 60%, and the phone policies vary between evaluations
+  more than that interval suggests (above).
+- In the first round every choice was made watching evaluations on the same
+  50 test states, and the ablation uses 4 of them, so those rows have no
+  untouched test set. From the second round, replay variants were screened and
+  checkpoints chosen on freshly sampled scenes.
 - The mapping relies on bowl and plate being round. An object with a front
   and a back would need its own orientation from the video, which this
   pipeline does not estimate.
@@ -205,7 +342,9 @@ hand in view but pauses too short to stand out from fingertip jitter.
 
 Linux only (LIBERO). Python 3.12, an NVIDIA GPU for training. One GPU job at a
 time: generation, training and evaluation all render with EGL, and four at
-once crashed WSL.
+once crashed WSL. On the laptop I used (RTX 4080 Laptop, 12 GB, under WSL) a
+replay takes about 46 s, a training step at batch 32 about 1.04 s (20,000
+steps in 5 h 45 min) and an evaluation of 50 episodes about 17 min.
 
 ```bash
 sudo apt install libegl1 libgles2
@@ -213,19 +352,47 @@ bash scripts/setup_env.sh
 source ~/venvs/phone-to-panda/bin/activate
 ```
 
-Recording protocol: [docs/recording.md](docs/recording.md). Then, with the
-clips in `data/raw/s01/`:
+The repo has everything measured from my clips except the video itself: the
+session's measurements and the phone calibration (`data/raw/s01/*.json`) and,
+for every frame of every clip, the hand landmarks in pixels and the board pose
+(`data/cache/s01/demo_*.npz`, 1.3 MB). That is enough for every step from
+`retarget.py` on. The 26 clips and the calibration video (audio and location
+removed) are a release asset, needed only for the calibration, the tracking
+and the overview figure:
 
 ```bash
+curl -LO https://github.com/andrealo20/phone-to-panda/releases/download/data-s01/s01_clips.zip
+unzip s01_clips.zip -d data/raw
 python scripts/calibrate.py data/raw/s01
 python scripts/track.py data/raw/s01 --overlay
+```
+
+From the measured data on (recording your own clips: [docs/recording.md](docs/recording.md)):
+
+```bash
 python scripts/retarget.py data/raw/s01
 python scripts/generate.py data/raw/s01 --per-demo 8 --out outputs/datasets/phone_all
 bash experiments/train.sh teleop
 bash experiments/train.sh phone
+python scripts/mix_datasets.py 13 && bash experiments/train.sh mixed
 bash experiments/eval.sh ~/runs/teleop13
 bash experiments/eval.sh ~/runs/phone13
+bash experiments/eval.sh ~/runs/mixed13
+bash experiments/eval.sh ~/runs/teleop13 last 10   # replanning every 10 steps
+bash experiments/eval.sh ~/runs/phone13 last 10
 python scripts/ablate.py data/raw/s01
+# second round
+python scripts/screen_servo.py
+python scripts/generate.py data/raw/s01 --keep 16 --max-tries 40 --seed 1 --carry-steps 40 --out outputs/datasets/phone_bal16
+PHONE=phone_bal16 RUN=phone_bal16_20k STEPS=20000 bash experiments/train.sh phone
+for c in 004000 008000 012000 016000 020000; do DEV_SEED=10000 bash experiments/eval.sh ~/runs/phone_bal16_20k $c 10; done
+bash experiments/eval.sh ~/runs/phone_bal16_20k 008000 10
+bash experiments/eval.sh ~/runs/phone_bal16_20k 008000
+python scripts/generate.py data/raw/s01 --keep 16 --max-tries 40 --seed 2 --carry-steps 40 --out outputs/datasets/phone_bal16b
+lerobot-edit-dataset --new_repo_id local/phone_bal32 --new_root outputs/datasets/phone_bal32 --operation.type merge \
+  --operation.repo_ids "['local/phone_bal16','local/phone_bal16b']" \
+  --operation.roots "['outputs/datasets/phone_bal16','outputs/datasets/phone_bal16b']"
+PHONE=phone_bal32 RUN=phone_bal32_16k STEPS=16000 bash experiments/train.sh phone
 python scripts/render_replay.py data/raw/s01 demo_020 --state 1
 python scripts/figures.py data/raw/s01 demo_020 --sim outputs/figures/demo_020_sim.png
 python scripts/make_gifs.py
@@ -246,7 +413,10 @@ src/p2p/      board.py camera.py hand.py video.py   perception
               sim_map.py                              table frame -> LIBERO scene
               sim.py                                  servo, playback, LeRobot frames
 scripts/      calibrate, track, retarget, generate, ablate, render_replay,
-              figures, make_gifs, sim_smoke, make_board, libero_episodes
+              figures, make_gifs, sim_smoke, make_board, libero_episodes,
+              mix_datasets, screen_servo
 experiments/  train.sh, eval.sh
+data/         raw/s01/   measurements and phone calibration (clips in the release)
+              cache/s01/ hand landmarks and board pose of every frame
 docs/         recording.md, board/, figures/, media/
 ```
