@@ -9,7 +9,8 @@
 # data's 256x256 instead of LeRobot's default 360x360 (suffix _s256).
 # DEV_SEED=<n> evaluates on 50 freshly sampled scenes from that seed instead of
 # the 50 fixed states (suffix _dev<n>), to choose a checkpoint without looking
-# at the final test states.
+# at the final test states. EVAL_SEED=<n> repeats the 50 fixed states with
+# another seed for the policy's sampling (suffix _seed<n>).
 set -euo pipefail
 RUN="$1"
 CKPT="${2:-last}"
@@ -20,6 +21,10 @@ export MUJOCO_GL=egl
 OUT="$RUN/eval_$CKPT"
 EXTRA=()
 SEED=1000
+if [ -n "${EVAL_SEED:-}" ]; then  # same 50 states, another draw of the policy's sampling
+  OUT="${OUT}_seed$EVAL_SEED"
+  SEED="$EVAL_SEED"
+fi
 if [ -n "${DEV_SEED:-}" ]; then
   OUT="${OUT}_dev$DEV_SEED"
   SEED="$DEV_SEED"

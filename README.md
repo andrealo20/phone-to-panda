@@ -6,9 +6,10 @@ hand, and used those clips to make a Panda arm do the same task in LIBERO
 table in centimetres, mapped onto the simulated scene, and replayed open loop
 in several LIBERO scenes; the replays that succeed become training data for
 SmolVLA, compared against the same number of LIBERO's own teleoperated
-demonstrations. The best policy trained only on my clips solves 23 of the 50
-test states; the same model trained on 13 teleoperated demos solves 46 (both
-predicting again every 10 actions).
+demonstrations. The best policy trained only on my clips solves 70 of 150
+test episodes (the 50 test states, evaluated three times: 23, 25 and 22); the
+same model trained on 13 teleoperated demos solves 46 of 50 (both predicting
+again every 10 actions).
 
 | | |
 |---|---|
@@ -68,11 +69,13 @@ predicting again every 10 actions.
 | 13 phone clips, wrist kept at rest | 40 of 104 | 4k | 3 | |
 | 13 phone clips, wrist at rest, approach cut to the last 10 cm | 64 of 104 | 4k | 9 | 6 |
 | the 13 teleoperated demos and those 64 replays together | | 4k | 8 | |
-| 13 phone clips, 16 replays kept per clip, shorter carry | 181 of 367 | 8k (of 20k) | 11 | **23** |
+| 13 phone clips, 16 replays kept per clip, shorter carry | 181 of 367 | 8k (of 20k) | 11 | **23** (then 25, 22) |
 | the same with twice as many replays | 372 of 725 | 16k | 13 | 10 |
 
-95% intervals: 42 of 50 is 71 to 92%, 46 is 81 to 97%, 23 is 33 to 60%, 9 is
-10 to 31%. Between phone rows, a few successes either way mean nothing.
+95% intervals: 42 of 50 is 71 to 92%, 46 is 81 to 97%, 9 is 10 to 31%. The
+best phone checkpoint was evaluated three times on the test states, with
+different seeds for the policy's sampling: 70 of 150, 39 to 55%. Between the
+other phone rows, a few successes either way mean nothing.
 
 ### First round: 0% to 18%
 
@@ -148,12 +151,14 @@ twists the wrist over the bowl and never holds it.
 Twice as many replays did not help: 31 of 50 on fresh scenes, level with the
 181, but 10 and 13 on the test states.
 
-These numbers are noisy. The two chosen checkpoints solve 30 and 31 of 50
+The best checkpoint holds up when evaluated again: with two more seeds for
+the policy's sampling it solves 25 and 22 of the 50 test states, 70 of 150 in
+all. 12 states are solved all three times, 15 never. What I cannot explain is
+the gap between scene sets: the two chosen checkpoints solve 30 and 31 of 50
 fresh scenes but between 10 and 23 of the test states, and the same checkpoint
 gives 23 or 11 depending only on how often it replans. The object layouts of
 the two scene sets match; the robot's start differs by about 1 cm, but success
-does not track that offset. With one 50-episode evaluation per model, 23 of 50
-is a single draw.
+does not track that offset.
 
 | | | |
 |---|---|---|
@@ -319,9 +324,9 @@ hand in view but pauses too short to stand out from fingertip jitter.
 
 ## Limitations
 
-- One task, one seed per training run, 50 evaluation episodes: the 46% has an
-  interval from 33 to 60%, and the phone policies vary between evaluations
-  more than that interval suggests (above).
+- One task and one training seed per row. The best phone checkpoint was
+  evaluated three times (70 of 150, 39 to 55%); every other row rests on a
+  single 50-episode evaluation.
 - In the first round every choice was made watching evaluations on the same
   50 test states, and the ablation uses 4 of them, so those rows have no
   untouched test set. From the second round, replay variants were screened and
@@ -388,6 +393,7 @@ PHONE=phone_bal16 RUN=phone_bal16_20k STEPS=20000 bash experiments/train.sh phon
 for c in 004000 008000 012000 016000 020000; do DEV_SEED=10000 bash experiments/eval.sh ~/runs/phone_bal16_20k $c 10; done
 bash experiments/eval.sh ~/runs/phone_bal16_20k 008000 10
 bash experiments/eval.sh ~/runs/phone_bal16_20k 008000
+for s in 2000 3000; do EVAL_SEED=$s bash experiments/eval.sh ~/runs/phone_bal16_20k 008000 10; done
 python scripts/generate.py data/raw/s01 --keep 16 --max-tries 40 --seed 2 --carry-steps 40 --out outputs/datasets/phone_bal16b
 lerobot-edit-dataset --new_repo_id local/phone_bal32 --new_root outputs/datasets/phone_bal32 --operation.type merge \
   --operation.repo_ids "['local/phone_bal16','local/phone_bal16b']" \
