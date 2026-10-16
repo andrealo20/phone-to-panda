@@ -11,6 +11,13 @@ test episodes (the 50 test states, evaluated three times: 23, 25 and 22); the
 same model trained on 13 teleoperated demos solves 46 of 50 (both predicting
 again every 10 actions).
 
+The phone policy learns from my clips alone: no LIBERO demonstration goes into
+its training data, nothing in the videos is labelled by hand (the phone is
+calibrated, grasp and release come from the motion), and the evaluation is
+LIBERO's own task with its 50 fixed test states, in a kitchen scene with five
+other objects on the table. The trained policy, its dataset and the clips are
+in the [release](https://github.com/andrealo20/phone-to-panda/releases/tag/v2).
+
 | | |
 |---|---|
 | <img src="docs/media/phone_demo_020.gif" width="427" alt="One of my clips, with the board axes and my thumb and index tips"> | <img src="docs/media/replay_demo_020.gif" width="240" alt="The same clip replayed in LIBERO"> |
@@ -322,11 +329,24 @@ lifted it, and the hand was lost exactly at the pauses. After moving the phone
 closer and higher, 6 of 9 clips passed. The three that still failed have the
 hand in view but pauses too short to stand out from fingertip jitter.
 
+## Next
+
+- Noise in the replays. The servo follows each path exactly, so the policy
+  never sees how to recover from a deviation, and 3 of the 5 recorded failures
+  are a bowl left on the rim with no recovery. Perturbing the commanded path
+  during generation, as in DART, would put corrections into the data.
+- The teleoperated baseline at the same 20,000 steps, for an equal-budget gap.
+- A scripted control: straight-line pick and place replayed and trained the
+  same way, to separate what the pipeline limits from what my clips add.
+
 ## Limitations
 
 - One task and one training seed per row. The best phone checkpoint was
   evaluated three times (70 of 150, 39 to 55%); every other row rests on a
   single 50-episode evaluation.
+- The teleoperated baseline trained for 4,000 steps, the best phone policy for
+  20,000 (checkpoint chosen at 8,000). I did not rerun the baseline with the
+  longer budget, so the gap between the two is not measured at equal training.
 - In the first round every choice was made watching evaluations on the same
   50 test states, and the ablation uses 4 of them, so those rows have no
   untouched test set. From the second round, replay variants were screened and
@@ -366,10 +386,21 @@ removed) are a release asset, needed only for the calibration, the tracking
 and the overview figure:
 
 ```bash
-curl -LO https://github.com/andrealo20/phone-to-panda/releases/download/data-s01/s01_clips.zip
+curl -LO https://github.com/andrealo20/phone-to-panda/releases/download/v2/s01_clips.zip
 unzip s01_clips.zip -d data/raw
 python scripts/calibrate.py data/raw/s01
 python scripts/track.py data/raw/s01 --overlay
+```
+
+To check the main result without training, the release has the chosen
+checkpoint (900 MB) and the dataset it was trained on (190 MB, 181 replays):
+
+```bash
+curl -LO https://github.com/andrealo20/phone-to-panda/releases/download/v2/smolvla_phone_bal16_8k.zip
+unzip smolvla_phone_bal16_8k.zip -d ~/runs
+bash experiments/eval.sh ~/runs/phone_bal16_20k 008000 10   # 23 of 50 with seed 1000
+curl -LO https://github.com/andrealo20/phone-to-panda/releases/download/v2/phone_bal16.zip
+unzip phone_bal16.zip -d outputs/datasets                    # train on it without generating
 ```
 
 From the measured data on (recording your own clips: [docs/recording.md](docs/recording.md)):
